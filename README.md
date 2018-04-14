@@ -4,11 +4,11 @@
 
 Blinkt_Spidev is a Rust library that provides an interface for the Pimoroni Blinkt!, and any similar APA102 or SK9822 strips or boards, on a Raspberry Pi.
 
-Blinkt_Spidev accesses the BCM283x GPIO peripheral through `/dev/spidev0.0` or similar. Both the original APA102 and the SK9822 clone are supported. The APA102 RGB LED/driver ICs are referred to as pixels throughout the code and documentation.
+Blinkt_Spidev accesses the BCM283x SPI peripheral through `/dev/spidev0.0` or similar. Both the original APA102 and the SK9822 clone are supported. The APA102 RGB LED/driver ICs are referred to as pixels throughout the code and documentation.
 
 ## Documentation
 
-Documentation for the latest release of `blinkt_spidev` can be found at [docs.golemparts.com/blinkt](https://docs.golemparts.com/blinkt). Documentation for earlier releases is stored at [docs.rs/blinkt](https://docs.rs/blinkt).
+Documentation for the latest release of `blinkt` can be found at [docs.golemparts.com/blinkt](https://docs.golemparts.com/blinkt). Documentation for earlier releases is stored at [docs.rs/blinkt](https://docs.rs/blinkt).
 
 This fork is quite similar, with the exception that you must specify the Linux path to the SPI device. Also, it's not published in the usual Rust infrastructure. 
 
