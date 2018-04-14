@@ -1,12 +1,12 @@
-extern crate blinkt;
+extern crate blinkt_spidev;
 
 use std::{mem, thread};
 use std::time::Duration;
 
-use blinkt::Blinkt;
+use blinkt_spidev::BlinktSpidev;
 
 fn main() {
-    let mut blinkt = Blinkt::new().unwrap();
+    let mut blinkt = BlinktSpidev::new().unwrap();
     let (red, green, blue) = (&mut 255, &mut 0, &mut 0);
 
     loop {
