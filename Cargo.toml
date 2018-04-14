@@ -1,7 +1,7 @@
 [package]
-name = "blinkt"
-version = "0.3.0"
-authors = ["Rene van der Meer <rene@golemparts.com>"]
+name = "blinkt_spidev"
+version = "0.0.1"
+authors = ["Rene van der Meer <rene@golemparts.com>", "Alex Jago <alex@abjago.net>"]
 description = "Provides an interface for the Pimoroni Blinkt!, and any similar APA102 or SK9822 strips or boards, on a Raspberry Pi."
 documentation = "https://doc.golemparts.com/blinkt"
 repository = "https://github.com/golemparts/blinkt"
@@ -11,8 +11,7 @@ categories = ["embedded", "hardware-support"]
 keywords = ["apa102","pimoroni","blinkt","raspberry","pi"]
 
 [dependencies]
-quick-error = "1.1"
-rppal = "0.3"
+spidev="0.3.0"
 
 [dev-dependencies]
 rand = "0.3"

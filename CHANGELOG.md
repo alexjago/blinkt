@@ -1,3 +1,11 @@
+# 0.0.1	(April 15, 2018)
+
+* Adapted from `blinkt` crate at version `0.3.0`. 
+* Still lots of error handling to add properly.
+
+
+# `blinkt` changelog prior to adaptation
+
 # 0.3.0 (Mar 16, 2018)
 
 * Add support for Raspberry Pi 3 B+
