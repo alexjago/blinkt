@@ -1,4 +1,5 @@
-// Copyright (c) 2016-2018 Rene van der Meer
+// Copyright (c)	2016-2018	Rene van der Meer
+// Modified			2018		Alex Jago
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -21,10 +22,9 @@
 //! A Rust library that provides an interface for the Pimoroni Blinkt!, and any
 //! similar APA102 or SK9822 strips or boards, on a Raspberry Pi.
 //!
-//! Blinkt accesses the BCM283x GPIO peripheral either through `/dev/gpiomem`
-//! (preferred) or `/dev/mem`. Both the original APA102 and the SK9822 clone
-//! are supported. The APA102 RGB LED/driver ICs are referred to as pixels
-//! throughout the code and documentation.
+//! Blinkt-spidev now accesses the GPIO via `/dev/spidev*`. Both the original 
+//! APA102 and the SK9822 clone are supported. The APA102 RGB LED/driver ICs are 
+//! referred to as pixels throughout the code and documentation.
 //!
 //! Each pixel has a red, green and blue LED with possible values between 0-255.
 //! Additionally, the overall brightness of each pixel can be set to 0.0-1.0, which
@@ -80,39 +80,19 @@
 //! ```
 //!
 
-#![recursion_limit = "128"] // Needed for the quick_error! macro
+extern crate spidev;
 
-#[macro_use]
-extern crate quick_error;
-extern crate rppal;
+use std::{io, result};
+use std::io::prelude::*;
 
-use std::result;
+use std::path::Path;
 
-use rppal::gpio::{Gpio, Level, Mode};
+use spidev::{Spidev, SpidevOptions, SpidevTransfer, SPI_MODE_0};
 
-pub use rppal::gpio::Error as GpioError;
-
-// Default values for the Pimoroni Blinkt! board using BCM GPIO pin numbers
-const DAT: u8 = 23;
-const CLK: u8 = 24;
 const NUM_PIXELS: usize = 8;
+const DEVPATH: &'static str = "/dev/spidev0.0";
 
 const DEFAULT_BRIGHTNESS: u8 = 7;
-
-quick_error! {
-    #[derive(Debug)]
-/// Errors that can occur when creating a new Blinkt.
-    pub enum Error {
-/// Accessing the GPIO peripheral returned an error.
-///
-/// Some of these errors can be fixed by changing file permissions, or upgrading
-/// to a newer version of Raspbian.
-        Gpio(err: GpioError) { description(err.description()) from() }
-    }
-}
-
-/// Result type returned from methods that can have `blinkt::Error`s.
-pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Debug, Copy, Clone)]
 struct Pixel {
@@ -136,46 +116,44 @@ impl Default for Pixel {
 /// Interface for a Blinkt! or any similar APA102 or SK9822 strips/boards.
 ///
 /// By default, Blinkt is set up to communicate with an 8-pixel board through
-/// data pin GPIO 23 and clock pin GPIO 24. These settings can be changed to
-/// support alternate configurations.
-pub struct Blinkt {
-    gpio: Gpio,
-    pixels: Vec<Pixel>,
+/// data pin GPIO 19 (SPI0 MOSI) and clock pin GPIO 23 (SPI0 SCLK). These settings 
+/// can be changed to support alternate configurations (i.e. to use SPI1).
+
+pub struct BlinktSpidev {
+	spi: Spidev,
+	pixels: Vec<Pixel>,
     clear_on_drop: bool,
-    pin_data: u8,
-    pin_clock: u8,
     endframe_pulses: usize,
 }
 
-impl Blinkt {
+impl BlinktSpidev {
     /// Creates a new `Blinkt` using the default settings for a Pimoroni
     /// Blinkt! board.
     ///
-    /// This sets the data pin to GPIO 23, the clock pin to GPIO 24, and number
+    /// This sets the data pin to GPIO 19, the clock pin to GPIO 23, and number
     /// of pixels to 8.
-    pub fn new() -> Result<Blinkt> {
-        Blinkt::with_settings(DAT, CLK, NUM_PIXELS)
+    pub fn new() -> io::Result<BlinktSpidev> {
+        BlinktSpidev::with_settings(DEVPATH, NUM_PIXELS)
     }
 
     /// Creates a new `Blinkt` using custom settings for the data pin, clock
     /// pin, and number of pixels. Pins should be specified by their BCM GPIO
     /// pin numbers.
-    pub fn with_settings(pin_data: u8, pin_clock: u8, num_pixels: usize) -> Result<Blinkt> {
-        // GPIO init might fail with an error the user could solve
-        let mut gpio = try!(Gpio::new());
-
-        gpio.set_mode(pin_data, Mode::Output);
-        gpio.write(pin_data, Level::Low);
-        gpio.set_mode(pin_clock, Mode::Output);
-        gpio.write(pin_clock, Level::Low);
-
-        Ok(Blinkt {
-            gpio: gpio,
-            pixels: vec![Pixel::default(); num_pixels],
+    pub fn with_settings<P: AsRef<Path>>(path:P, num_pixels: usize) -> io::Result<BlinktSpidev> { 
+		
+		let mut spi = try!(Spidev::open(path));
+		let spi_options = SpidevOptions::new()
+				.bits_per_word(8)
+				.max_speed_hz(600_000)
+				.mode(SPI_MODE_0)
+				.build();
+				try!(spi.configure(&spi_options));
+		
+        Ok(BlinktSpidev {
+			spi: spi,
+			pixels: vec![Pixel::default(); num_pixels],
             clear_on_drop: true,
-            pin_data: pin_data,
-            pin_clock: pin_clock,
-            endframe_pulses: ((num_pixels as f32 * 0.5) + 0.5) as usize,
+            endframe_pulses: (num_pixels + 1)/2 as usize,
         })
     }
 
@@ -203,8 +181,6 @@ impl Blinkt {
             self.clear();
             self.show();
         }
-
-        self.gpio.cleanup();
     }
 
     /// Sets the red, green and blue values for a single pixel in the local
@@ -315,49 +291,38 @@ impl Blinkt {
 
     /// Sends the contents of the local buffer to the pixels, updating their
     /// LED colors and brightness.
-    pub fn show(&self) {
+    pub fn show(&mut self) {
         // Start frame (32x0)
-        self.write_byte(0);
-        self.write_byte(0);
-        self.write_byte(0);
-        self.write_byte(0);
+		self.spi.write(&[0_u8; 4]);
 
-        // LED frames
+		// LED frames
         for pixel in &self.pixels {
-            self.write_byte(0b11100000 | pixel.brightness); // 3-bit header + 5-bit brightness
-            self.write_byte(pixel.blue);
-            self.write_byte(pixel.green);
-            self.write_byte(pixel.red);
+			self.spi.write(&[(0b11100000 | pixel.brightness), pixel.blue, pixel.green, pixel.red]);	
+			// 3-bit header + 5-bit brightness
         }
 
-        // We send another start frame immediately after our end frame, because
+		// End frame (minimum 32x1; we also require additional 1s to clock all the way along)
+
+		self.spi.write(&[255_u8; 4]);
+
+		for _ in 0..((self.endframe_pulses)/8) {
+			self.spi.write(&[0xFF]);
+		}
+		
+		// We send another start frame immediately after our end frame, because
         // the SK9822 clone won't update the pixels until it receives the next
         // start frame. We still start show() with a start frame, basically
         // sending it twice, in case the user connects a Blinkt! while the
         // code is already running. This workaround is compatible with both
         // the original APA102 and the SK9822 clone.
-        self.gpio.write(self.pin_data, Level::Low);
-        for _ in 0..32 + self.endframe_pulses {
-            self.gpio.write(self.pin_clock, Level::High);
-            self.gpio.write(self.pin_clock, Level::Low);
-        }
+
+		self.spi.write(&[0_u8; 4]);
+		
     }
 
-    fn write_byte(&self, byte: u8) {
-        for n in 0..8 {
-            if (byte & (1 << (7 - n))) > 0 {
-                self.gpio.write(self.pin_data, Level::High);
-            } else {
-                self.gpio.write(self.pin_data, Level::Low);
-            }
-
-            self.gpio.write(self.pin_clock, Level::High);
-            self.gpio.write(self.pin_clock, Level::Low);
-        }
-    }
 }
 
-impl Drop for Blinkt {
+impl Drop for BlinktSpidev {
     fn drop(&mut self) {
         self.cleanup();
     }
@@ -365,10 +330,10 @@ impl Drop for Blinkt {
 
 #[test]
 fn test_new() {
-    let mut blinkt = match Blinkt::new() {
+    let mut blinkt = match BlinktSpidev::new() {
         // GPIO errors are acceptable, since they're likely caused by outside
         // distro/filesystem issues.
-        Err(Error::Gpio(_)) => return,
+        Err(Error::Spidev(_)) => return,
         Ok(blinkt) => blinkt,
     };
 
