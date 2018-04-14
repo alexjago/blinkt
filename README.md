@@ -26,7 +26,7 @@ blinkt_spidev = {path = /path/to/blinkt_spidev}
 Link and import `blinkt_spidev` from your crate root.
 
 ```rust
-extern crate blinkt;
+extern crate blinkt_spidev;
 ```
 
 Call `BlinktSpidev::new()` to create a new Blinkt with the default settings. In production code, you'll want to parse the result rather than unwrap it.
