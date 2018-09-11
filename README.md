@@ -1,3 +1,5 @@
+DEPRECATED: Rene has added SPI support upstream now, so this fork no longer has any reason to exist.
+
 # Blinkt_Spidev
 
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
